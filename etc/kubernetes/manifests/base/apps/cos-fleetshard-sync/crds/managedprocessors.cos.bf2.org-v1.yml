@@ -40,7 +40,7 @@ spec:
               clusterId:
                 type: string
               definition:
-                type: string
+                x-kubernetes-preserve-unknown-fields: true
               deploymentId:
                 type: string
               deploymentResourceVersion:

@@ -15,6 +15,13 @@ import io.fabric8.kubernetes.model.annotation.Version;
 public class ManagedProcessor extends CustomResource<ManagedProcessorSpec, ManagedProcessorStatus>
     implements Namespaced {
 
+    public static final String DESIRED_STATE_READY = "ready";
+    public static final String DESIRED_STATE_DELETED = "deleted";
+    public static final String DESIRED_STATE_UNASSIGNED = "unassigned";
+    public static final String DESIRED_STATE_STOPPED = "stopped";
+    public static final String STATE_PROVISIONING = "provisioning";
+    public static final String STATE_DE_PROVISIONING = "deprovisioning";
+
     @Override
     protected ManagedProcessorSpec initSpec() {
         return new ManagedProcessorSpec();

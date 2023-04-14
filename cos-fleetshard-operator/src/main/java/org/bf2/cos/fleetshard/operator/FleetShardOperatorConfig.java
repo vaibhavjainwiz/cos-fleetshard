@@ -39,6 +39,13 @@ public interface FleetShardOperatorConfig {
      */
     Metrics metrics();
 
+    /**
+     * Configuration options for processors.
+     *
+     * @return {@link Processors}
+     */
+    Processors processors();
+
     interface Operator {
         /**
          * The ID assigned to the operator.
@@ -85,5 +92,21 @@ public interface FleetShardOperatorConfig {
         String baseName();
 
         MetricsRecorderConfig recorder();
+    }
+
+    interface Processors {
+        /**
+         * An optional set of labels to be transferred to the generated resources
+         *
+         * @return the list fo labels
+         */
+        Optional<Set<String>> targetLabels();
+
+        /**
+         * An optional set of annotations to be transferred to the generated resources
+         *
+         * @return the list fo annotations
+         */
+        Optional<Set<String>> targetAnnotations();
     }
 }

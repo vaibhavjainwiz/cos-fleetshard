@@ -3,6 +3,7 @@ package org.bf2.cos.fleetshard.api;
 import java.util.Objects;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import io.fabric8.kubernetes.model.annotation.PrinterColumn;
 
@@ -29,7 +30,7 @@ public class ManagedProcessorSpec {
 
     private String secret;
 
-    private String definition;
+    private JsonNode definition;
 
     private String unitOfWork;
 
@@ -99,11 +100,11 @@ public class ManagedProcessorSpec {
         this.secret = secret;
     }
 
-    public String getDefinition() {
+    public JsonNode getDefinition() {
         return definition;
     }
 
-    public void setDefinition(String definition) {
+    public void setDefinition(JsonNode definition) {
         this.definition = definition;
     }
 

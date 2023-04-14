@@ -69,6 +69,11 @@ public final class Resources {
     public static final String COMPONENT_CONNECTOR = "cos-connector";
     public static final String COMPONENT_NAMESPACE = "cos-namespace";
 
+    public static final String LABEL_PROCESSOR_ID = "cos.bf2.org/processor.id";
+    public static final String LABEL_PROCESSOR_TYPE_ID = "cos.bf2.org/processor.type.id";
+    public static final String PROCESSOR_SECRET_SUFFIX = "-config";
+    public static final String COMPONENT_PROCESSOR = "cos-processor";
+
     private Resources() {
     }
 
