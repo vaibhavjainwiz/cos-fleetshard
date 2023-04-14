@@ -2,7 +2,6 @@ package org.bf2.cos.fleetshard.operator.camel.processor;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
-import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -14,19 +13,16 @@ import org.bf2.cos.fleetshard.api.ManagedProcessor;
 import org.bf2.cos.fleetshard.api.ServiceAccountSpec;
 import org.bf2.cos.fleetshard.api.ServiceAccountSpecBuilder;
 import org.bf2.cos.fleetshard.operator.camel.CamelOperandConfiguration;
-import org.bf2.cos.fleetshard.operator.camel.model.Integration;
-import org.bf2.cos.fleetshard.operator.camel.model.IntegrationSpec;
+import org.bf2.cos.fleetshard.operator.support.Comparator;
+import org.bf2.cos.fleetshard.operator.support.DeltaProcessor;
+import org.bf2.cos.fleetshard.operator.support.Reconciler;
 import org.bf2.cos.fleetshard.support.resources.Resources;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-
-import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Secret;
-import io.fabric8.kubernetes.client.utils.Serialization;
+import io.fabric8.kubernetes.client.KubernetesClient;
 
 import static org.bf2.cos.fleetshard.operator.camel.CamelConstants.APPLICATION_PROPERTIES;
 import static org.bf2.cos.fleetshard.support.CollectionUtils.asBytesBase64;
@@ -34,56 +30,57 @@ import static org.bf2.cos.fleetshard.support.resources.Secrets.SECRET_ENTRY_SERV
 import static org.bf2.cos.fleetshard.support.resources.Secrets.extract;
 
 @ApplicationScoped
-public class ReifyProcessorController {
+public class IntegrationSecretReconciler implements Reconciler<ManagedProcessor, Secret> {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(ReifyProcessorController.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(IntegrationSecretReconciler.class);
+
+    @Inject
+    KubernetesClient kubernetesClient;
 
     @Inject
     CamelOperandConfiguration configuration;
 
-    public List<HasMetadata> reify(ManagedProcessor processor, Secret serviceAccountSecret) {
-        LOGGER.debug("Reifying connector: {} and secret.metadata: {}", processor, serviceAccountSecret.getMetadata());
+    @Inject
+    ProcessorResourceEnricher processorResourceEnricher;
 
-        final Map<String, String> properties = createSecretsData(processor, serviceAccountSecret, configuration);
+    @Inject
+    DeltaProcessor deltaProcessor;
+
+    public boolean reconcile(ManagedProcessor processor) {
+        var requestedResource = createRequestedSecret(processor);
+        var deployedResource = fetchDeployedSecret(processor);
+        return deltaProcessor.processDelta(getComparator(), requestedResource, deployedResource);
+    }
+
+    @Override
+    public Comparator<Secret> getComparator() {
+        return new SecretComparator();
+    }
+
+    private Secret createRequestedSecret(ManagedProcessor processor) {
+        final Map<String, String> properties = createSecretsData(processor);
 
         final Secret secret = new Secret();
         secret.setMetadata(new ObjectMeta());
-        secret.getMetadata().setName(processor.getMetadata().getName() + Resources.PROCESSOR_SECRET_SUFFIX);
+        secret.getMetadata().setName(getIntegrationSecretName(processor));
         secret.setData(Map.of(APPLICATION_PROPERTIES, asBytesBase64(properties)));
 
-        ArrayNode flows = createIntegrationFlows(processor);
-        ObjectNode traits = createIntegrationTraits(secret);
-
-        final Integration integration = new Integration();
-        integration.setMetadata(new ObjectMeta());
-        integration.getMetadata().setName(processor.getMetadata().getName());
-        integration.getMetadata().setAnnotations(new TreeMap<>());
-        integration.getMetadata().setLabels(new TreeMap<>());
-        integration.setSpec(new IntegrationSpec());
-        integration.getSpec().setFlows(flows);
-        integration.getSpec().setTraits(traits);
-
-        return List.of(secret, integration);
+        processorResourceEnricher.appendLabels(processor, secret);
+        processorResourceEnricher.appendAnnotations(processor, secret);
+        processorResourceEnricher.appendOwnerReference(processor, secret);
+        return secret;
     }
 
-    private ArrayNode createIntegrationFlows(ManagedProcessor processor) {
-        ArrayNode flows = Serialization.jsonMapper().createArrayNode();
-        flows.add(processor.getSpec().getDefinition());
-        return flows;
+    private Secret fetchDeployedSecret(ManagedProcessor processor) {
+        return kubernetesClient.resources(Secret.class)
+            .inNamespace(processor.getMetadata().getNamespace())
+            .withName(getIntegrationSecretName(processor)).get();
     }
 
-    private ObjectNode createIntegrationTraits(Secret processorSecret) {
-        ObjectNode traits = Serialization.jsonMapper().createObjectNode();
-        ObjectNode mount = traits.putObject("mount");
-        ArrayNode configs = mount.withArray("configs");
-        configs.add("secret:" + processorSecret.getMetadata().getName());
-        return traits;
-    }
-
-    private Map<String, String> createSecretsData(ManagedProcessor processor, Secret serviceAccountSecret,
-        CamelOperandConfiguration cfg) {
+    private Map<String, String> createSecretsData(ManagedProcessor processor) {
         final Map<String, String> props = new TreeMap<>();
 
+        var serviceAccountSecret = fetchServiceAccountSecret(processor);
         ServiceAccountSpec serviceAccountSpec = extractServiceAccountSpec(serviceAccountSecret);
         props.put("camel.component.kafka.brokers", processor.getSpec().getKafka().getUrl());
         props.put("camel.component.kafka.security-protocol", "SASL_SSL");
@@ -109,23 +106,23 @@ public class ReifyProcessorController {
         props.put("camel.health.consumersEnabled", "true");
         props.put("camel.health.registryEnabled", "true");
 
-        if (cfg.routeController() != null) {
-            props.put("camel.main.route-controller-backoff-delay", cfg.routeController().backoffDelay());
-            props.put("camel.main.route-controller-initial-delay", cfg.routeController().initialDelay());
-            props.put("camel.main.route-controller-backoff-multiplier", cfg.routeController().backoffMultiplier());
-            props.put("camel.main.route-controller-backoff-max-attempts", cfg.routeController().backoffMaxAttempts());
+        if (configuration.routeController() != null) {
+            props.put("camel.main.route-controller-backoff-delay", configuration.routeController().backoffDelay());
+            props.put("camel.main.route-controller-initial-delay", configuration.routeController().initialDelay());
+            props.put("camel.main.route-controller-backoff-multiplier", configuration.routeController().backoffMultiplier());
+            props.put("camel.main.route-controller-backoff-max-attempts", configuration.routeController().backoffMaxAttempts());
         }
 
-        if (cfg.exchangePooling() != null) {
+        if (configuration.exchangePooling() != null) {
             props.put(
                 "camel.main.exchange-factory",
-                cfg.exchangePooling().exchangeFactory());
+                configuration.exchangePooling().exchangeFactory());
             props.put(
                 "camel.main.exchange-factory-capacity",
-                cfg.exchangePooling().exchangeFactoryCapacity());
+                configuration.exchangePooling().exchangeFactoryCapacity());
             props.put(
                 "camel.main.exchange-factory-statistics-enabled",
-                cfg.exchangePooling().exchangeFactoryStatisticsEnabled());
+                configuration.exchangePooling().exchangeFactoryStatisticsEnabled());
         }
         return props;
     }
@@ -146,4 +143,14 @@ public class ReifyProcessorController {
                 .build();
     }
 
+    private Secret fetchServiceAccountSecret(ManagedProcessor processor) {
+        return kubernetesClient.secrets()
+            .inNamespace(processor.getMetadata().getNamespace())
+            .withName(processor.getSpec().getSecret())
+            .get();
+    }
+
+    public static String getIntegrationSecretName(ManagedProcessor processor) {
+        return processor.getMetadata().getName() + Resources.PROCESSOR_SECRET_SUFFIX;
+    }
 }
