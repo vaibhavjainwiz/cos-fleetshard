@@ -46,14 +46,15 @@ public class ProcessorController implements Reconciler<ManagedProcessor> {
         // create secret
         var deltaProcessed = integrationSecretReconciler.reconcile(processor);
         if (deltaProcessed) {
-            return UpdateControl.updateStatus(processor);
+            return UpdateControl.patchStatus(processor);
         }
 
         // create integration
         deltaProcessed = integrationReconciler.reconcile(processor);
         if (deltaProcessed) {
-            return UpdateControl.updateStatus(processor);
+            return UpdateControl.patchStatus(processor);
         }
+
 
         return UpdateControl.noUpdate();
     }

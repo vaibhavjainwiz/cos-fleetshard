@@ -43,8 +43,8 @@ public class DeltaProcessor {
 
         // resource modified
         if (requestResource != null) {
-            var modified = comparator.compare(requestResource, deployedResource);
-            if (modified) {
+            var isEqual = comparator.compare(requestResource, deployedResource);
+            if (!isEqual) {
                 kubernetesClient.resource(deployedResource).inNamespace(deployedResource.getMetadata().getNamespace()).patch();
                 LOGGER.debug("Resource modified. Resource {}:{}:{}@{}",
                     deployedResource.getApiVersion(),

@@ -72,7 +72,7 @@ public class ProcessorSecretValidator {
                 "AugmentationError",
                 "AugmentationError");
 
-            return UpdateControl.updateStatus(processor);
+            return UpdateControl.patchStatus(processor);
         } else {
             return UpdateControl.<ManagedProcessor> noUpdate().rescheduleAfter(1500, TimeUnit.MILLISECONDS);
         }
@@ -103,7 +103,7 @@ public class ProcessorSecretValidator {
                 "AugmentationError",
                 "AugmentationError");
 
-            return UpdateControl.updateStatus(processor);
+            return UpdateControl.patchStatus(processor);
         } else {
             return UpdateControl.<ManagedProcessor> noUpdate().rescheduleAfter(1500, TimeUnit.MILLISECONDS);
         }

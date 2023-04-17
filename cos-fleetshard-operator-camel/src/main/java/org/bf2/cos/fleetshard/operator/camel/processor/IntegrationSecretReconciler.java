@@ -63,6 +63,7 @@ public class IntegrationSecretReconciler implements Reconciler<ManagedProcessor,
         final Secret secret = new Secret();
         secret.setMetadata(new ObjectMeta());
         secret.getMetadata().setName(getIntegrationSecretName(processor));
+        secret.getMetadata().setNamespace(processor.getMetadata().getNamespace());
         secret.setData(Map.of(APPLICATION_PROPERTIES, asBytesBase64(properties)));
 
         processorResourceEnricher.appendLabels(processor, secret);
